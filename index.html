@@ -260,61 +260,60 @@
 
     // 儲存至 Notion：傳送長連結，讓 Pipedream 去處理縮址
     async function saveToNotion() {
-    const btn = document.getElementById('saveBtn');
-    let shortUrlField = document.getElementById('shortUrl');
-    
-    // --- 強化邏輯：如果尚未產生短網址，先自動執行縮址 ---
-    if (!shortUrlField.value || shortUrlField.value === "") {
-        const confirmGen = confirm("尚未產生短網址，系統將先為您生成縮址再儲存至 Notion，好嗎？");
-        if (confirmGen) {
-            await generateShortLink(); // 呼叫原本的縮址函式
-        } else {
-            return; // 使用者取消則停止執行
+        const btn = document.getElementById('saveBtn');
+        let shortUrlField = document.getElementById('shortUrl');
+        
+        // --- 強化邏輯：如果尚未產生短網址，先自動執行縮址 ---
+        if (!shortUrlField.value || shortUrlField.value === "") {
+            const confirmGen = confirm("尚未產生短網址，系統將先為您生成縮址再儲存至 Notion，好嗎？");
+            if (confirmGen) {
+                await generateShortLink(); 
+            } else {
+                return; 
+            }
+        }
+
+        const items = [];
+        document.querySelectorAll('#item-list tr').forEach(row => {
+            items.push({ 
+                name: row.querySelector('.name-input').value, 
+                quantity: row.querySelector('.qty-input').value, 
+                price: row.querySelector('.price-input').value, 
+                subtotal: row.querySelector('.total-cell').innerText 
+            });
+        });
+
+        btn.innerText = "同步中..."; btn.disabled = true;
+
+        const payload = {
+            company: document.getElementById('clientName').value,
+            taxId: document.getElementById('clientTax').value,
+            id: document.getElementById('quoteId').value,
+            date: document.getElementById('currentDate').value, // <--- 補上這行：傳送日期
+            shortUrl: shortUrlField.value, 
+            total: parseInt(document.getElementById('grandTotal').innerText.replace(/,/g, '')),
+            taxMode: document.getElementById('isTaxInclusive').value,
+            items: items 
+        };
+
+        try {
+            const res = await fetch("https://eoj61hx5o5vdjh3.m.pipedream.net", { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify(payload) 
+            });
+            if (res.ok) {
+                alert('✅ 已同步至 Notion！\n日期：' + payload.date + '\n短網址：' + shortUrlField.value);
+            } else {
+                throw new Error();
+            }
+        } catch (e) { 
+            alert('❌ 同步失敗，請檢查網路連線'); 
+        } finally { 
+            btn.innerText = "儲存至 Notion"; 
+            btn.disabled = false; 
         }
     }
-
-    const items = [];
-    document.querySelectorAll('#item-list tr').forEach(row => {
-        items.push({ 
-            name: row.querySelector('.name-input').value, 
-            quantity: row.querySelector('.qty-input').value, 
-            price: row.querySelector('.price-input').value, 
-            subtotal: row.querySelector('.total-cell').innerText 
-        });
-    });
-
-    btn.innerText = "同步中..."; btn.disabled = true;
-
-    const payload = {
-        company: document.getElementById('clientName').value,
-        taxId: document.getElementById('clientTax').value,
-        id: document.getElementById('quoteId').value,
-        shortUrl: shortUrlField.value, // 這時一定會有值了
-        total: parseInt(document.getElementById('grandTotal').innerText.replace(/,/g, '')),
-        taxMode: document.getElementById('isTaxInclusive').value,
-        items: items 
-    };
-
-    try {
-        const res = await fetch("https://eoj61hx5o5vdjh3.m.pipedream.net", { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify(payload) 
-        });
-        if (res.ok) {
-            alert('✅ 已同步至 Notion！\n短網址：' + shortUrlField.value);
-        } else {
-            throw new Error();
-        }
-    } catch (e) { 
-        alert('❌ 同步失敗，請檢查網路連線'); 
-    } finally { 
-        btn.innerText = "儲存至 Notion"; 
-        btn.disabled = false; 
-    }
-}
-
-
         function saveAsImage(e) {
             const btn = e.target; btn.innerText = "產生中..."; btn.disabled = true;
             html2canvas(document.getElementById('invoice'), { scale: 2, backgroundColor: "#FFFFFF" }).then(canvas => {
