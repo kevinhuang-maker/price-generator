@@ -292,6 +292,7 @@
             date: document.getElementById('currentDate').value, // <--- 補上這行：傳送日期
             shortUrl: shortUrlField.value, 
             total: parseInt(document.getElementById('grandTotal').innerText.replace(/,/g, '')),
+            note: document.getElementById('quoteNote').value,
             taxMode: document.getElementById('isTaxInclusive').value,
             items: items 
         };
