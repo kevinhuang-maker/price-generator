@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>凱崴行銷 - 專業報價系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+        body { font-size: 0.95rem; } 
+        input, textarea { font-size: 0.9rem; border-radius: 4px; }
+        #quoteNote { font-size: 0.85rem; line-height: 1.5; overflow-y: hidden; resize: none; min-height: 80px; width: 100%; display: block; }
+        .signature-wrapper { border: 1px solid #e2e8f0; background-color: #f8fafc; border-radius: 0.375rem; position: relative; width: 100%; height: 160px; }
+        canvas { width: 100%; height: 100%; touch-action: none; }
+        
+        /* 手機版適配 */
+        @media (max-width: 640px) {
+            .invoice-container { padding: 1.25rem !important; }
+            .signature-grid { grid-template-columns: 1fr !important; }
+            .signature-wrapper { height: 200px; }
+            .header-flex { flex-direction: column !important; }
+            .header-info { text-align: left !important; margin-top: 1rem; }
+        }
+
+        @media print {
+            @page { size: A4; margin: 0.8cm; }
+            html, body { zoom: 92%; height: auto; }
+            .no-print { display: none !important; }
+            body { padding: 0; background: white; }
+            .shadow-lg { box-shadow: none !important; border: 1px solid #eee; }
+            input, textarea, select { border: none !important; background: transparent !important; appearance: none; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-2 md:p-6">
+
+    <div class="max-w-4xl mx-auto bg-white p-6 md:p-10 shadow-lg rounded-lg border border-gray-200 invoice-container" id="invoice">
+        <div class="flex justify-between items-start border-b-4 border-gray-800 pb-4 mb-6 header-flex">
+            <div>
+                <h1 class="text-4xl font-extrabold text-gray-800">報價單</h1>
+                <h2 class="text-xl font-bold text-blue-600 mt-1">凱崴行銷</h2>
+            </div>
+            <div class="text-right space-y-1 text-sm header-info">
+                <p class="text-gray-600">報價日期：<input type="date" id="currentDate" class="outline-none border-b border-gray-200"></p>
+                <p class="text-gray-800 font-bold">報價編號：<input type="text" id="quoteId" readonly class="outline-none md:text-right border-b border-gray-200 w-48 text-blue-700 bg-transparent"></p>
+                <p class="text-gray-500 text-xs no-print">線上連結：<input type="text" id="shortUrl" readonly class="outline-none md:text-right w-48 bg-transparent italic" placeholder="尚未產生連結"></p>
+            </div>
+        </div>
+
+        <div class="mb-6">
+            <h3 class="font-bold text-gray-700 mb-2 border-l-4 border-blue-500 pl-2 text-base">客戶資訊</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <div class="flex items-center"><span class="w-20 text-gray-500 flex-shrink-0">公司名稱:</span><input type="text" id="clientName" class="w-full border-b border-gray-300 px-2 outline-none focus:border-blue-400"></div>
+                <div class="flex items-center"><span class="w-20 text-gray-500 flex-shrink-0">統一編號:</span><input type="text" id="clientTax" class="w-full border-b border-gray-300 px-2 outline-none focus:border-blue-400"></div>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full mb-4 text-left border-collapse text-sm min-w-[500px] md:min-w-0">
+                <thead>
+                    <tr class="bg-gray-800 text-white">
+                        <th class="p-3 rounded-l-md">類別 / 項目</th>
+                        <th class="p-3 w-16 text-center">數量</th>
+                        <th class="p-3 w-28 text-center">單價</th>
+                        <th class="p-3 w-28 text-center">金額</th>
+                        <th class="p-3 w-10 no-print"></th>
+                    </tr>
+                </thead>
+                <tbody id="item-list"></tbody>
+            </table>
+        </div>
+        <button type="button" onclick="addItem()" id="addBtn" class="no-print mb-4 inline-flex items-center text-blue-600 font-bold text-sm">
+            <span class="text-lg mr-1">+</span> 新增報價項目
+        </button>
+
+        <div class="flex justify-end mb-6 text-right">
+            <div class="w-full md:w-64 border-t-2 border-gray-800 pt-2 space-y-1">
+                <div class="no-print flex items-center justify-end gap-2 mb-2" id="taxSwitch">
+                    <span class="text-xs text-gray-500">稅制選擇：</span>
+                    <select id="isTaxInclusive" onchange="calculate()" class="text-xs border border-gray-300 rounded px-1 py-1 outline-none">
+                        <option value="yes">含稅 (5%)</option>
+                        <option value="no">未稅</option>
+                    </select>
+                </div>
+                <span class="text-sm text-gray-600 block"><span id="taxStatusLabel">總計金額 (含稅)</span></span>
+                <span id="grandTotal" class="font-bold text-2xl text-blue-700">0</span>
+            </div>
+        </div>
+
+        <div class="mb-6 bg-gray-50 p-4 rounded-lg border-l-4 border-gray-300">
+            <h4 class="font-bold text-gray-700 mb-1 text-sm underline">報價備註說明 (Notes)</h4>
+            <textarea id="quoteNote" oninput="autoHeight(this)" class="w-full bg-transparent outline-none text-gray-600" placeholder="請輸入備註內容..."></textarea>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 signature-grid">
+            <div class="border border-gray-300 rounded p-4 min-h-[160px] flex flex-col justify-between italic text-gray-400 text-center bg-gray-50/50">
+                <p class="font-bold text-sm text-blue-600 not-italic text-center">凱崴行銷簽章區</p>
+                請蓋公司章或簽名
+                <div class="text-xs pt-1 border-t border-dashed text-right not-italic">日期：2026 / &nbsp;&nbsp;&nbsp; / </div>
+            </div>
+            <div class="border border-gray-300 rounded p-4 min-h-[160px] flex flex-col justify-between">
+                <div class="flex justify-between items-center"><p class="font-bold text-sm">客戶簽名處</p><button type="button" onclick="clearSignature()" class="no-print text-xs text-red-500">清除</button></div>
+                <div class="signature-wrapper"><canvas id="signature-pad"></canvas></div>
+                <div class="text-xs text-gray-400 pt-1 border-t border-dashed text-right">日期：2026 / &nbsp;&nbsp;&nbsp; / </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto mt-6 flex gap-3 justify-center no-print flex-wrap px-4 pb-10">
+        <button onclick="handlePrint()" class="bg-gray-800 text-white font-bold py-3 px-6 rounded shadow text-sm">列印 PDF</button>
+        <button onclick="saveAsImage(event)" class="bg-orange-500 text-white font-bold py-3 px-6 rounded shadow text-sm">存為 PNG (回傳用)</button>
+        <button onclick="saveToNotion()" id="saveBtn" class="bg-blue-600 text-white font-bold py-3 px-6 rounded shadow text-sm">儲存至 Notion</button>
+        <button onclick="generateShortLink()" id="linkBtn" class="bg-green-600 text-white font-bold py-3 px-6 rounded shadow text-sm">生成縮址連結</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('signature-pad');
+        const signaturePad = new SignaturePad(canvas, { backgroundColor: 'rgba(255, 255, 255, 0)', penColor: 'rgb(0, 0, 0)' });
+
+        function generateMantaId() {
+            const now = new Date();
+            const dateStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+            const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+            return `manta-${dateStr}-${randomStr}`;
+        }
+
+        window.onload = function() {
+            document.getElementById('currentDate').valueAsDate = new Date();
+            resizeCanvas();
+            const p = new URLSearchParams(window.location.search);
+            
+            // 還原資料清單
+            if (p.has('items')) {
+                try {
+                    const itemsData = JSON.parse(decodeURIComponent(p.get('items')));
+                    itemsData.forEach(item => addItem(item.n, item.q, item.p));
+                } catch (e) { addItem(); }
+            } else { addItem(); }
+            
+            // 報價編號處理
+            if(p.get('i')) document.getElementById('quoteId').value = p.get('i');
+            else document.getElementById('quoteId').value = generateMantaId();
+
+            if(p.get('c')) document.getElementById('clientName').value = p.get('c');
+            if(p.get('t')) document.getElementById('clientTax').value = p.get('t');
+            if(p.get('n')) { document.getElementById('quoteNote').value = p.get('n'); autoHeight(document.getElementById('quoteNote')); }
+            if(p.get('tx')) document.getElementById('isTaxInclusive').value = p.get('tx');
+
+            calculate();
+
+            // 客戶端模式
+            if (p.get('lock') === '1') {
+                document.querySelectorAll('input, textarea, select').forEach(el => el.disabled = true);
+                document.getElementById('addBtn').style.display = 'none';
+                document.getElementById('linkBtn').style.display = 'none';
+                document.getElementById('saveBtn').style.display = 'none';
+                document.getElementById('taxSwitch').style.display = 'none';
+                document.querySelectorAll('#item-list button').forEach(b => b.style.display='none');
+            }
+        };
+
+        function resizeCanvas() {
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            const container = canvas.parentElement;
+            canvas.width = container.offsetWidth * ratio;
+            canvas.height = container.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+        }
+
+        function calculate() {
+            let s = 0;
+            document.querySelectorAll('#item-list tr').forEach(r => {
+                const q = parseFloat(r.querySelector('.qty-input').value) || 0;
+                const p = parseFloat(r.querySelector('.price-input').value) || 0;
+                const t = q * p;
+                r.querySelector('.total-cell').innerText = t.toLocaleString();
+                s += t;
+            });
+            const taxMode = document.getElementById('isTaxInclusive').value;
+            let finalTotal = (taxMode === 'yes') ? Math.round(s * 1.05) : s;
+            document.getElementById('taxStatusLabel').innerText = (taxMode === 'yes') ? "總計金額 (含稅)" : "總計金額 (未稅)";
+            document.getElementById('grandTotal').innerText = finalTotal.toLocaleString();
+        }
+
+        function addItem(name = "", qty = 1, price = 0) {
+            const list = document.getElementById('item-list');
+            const row = document.createElement('tr');
+            row.className = "border-b border-gray-100";
+            row.innerHTML = `<td class="p-2"><input type="text" value="${name}" class="name-input w-full outline-none bg-transparent"></td><td class="p-2 text-center"><input type="number" value="${qty}" class="qty-input w-full text-center outline-none bg-transparent" oninput="calculate()"></td><td class="p-2 text-center"><input type="number" value="${price}" class="price-input w-full text-center outline-none bg-transparent" oninput="calculate()"></td><td class="p-2 text-center font-bold total-cell text-gray-700">0</td><td class="p-2 no-print text-right"><button onclick="removeItem(this)" class="text-red-400 font-bold">✕</button></td>`;
+            list.appendChild(row);
+            calculate();
+        }
+
+
+        // 生成連結：現在直接複製長連結，縮址交給 Pipedream 後台處理
+    async function generateShortLink() {
+    const btn = document.getElementById('linkBtn');
+    const originalText = btn.innerText;
+    btn.innerText = "縮址中...";
+    btn.disabled = true;
+
+    // 1. 收集項目資料
+    const items = [];
+    document.querySelectorAll('#item-list tr').forEach(row => {
+        const n = row.querySelector('.name-input').value;
+        const q = row.querySelector('.qty-input').value;
+        const p = row.querySelector('.price-input').value;
+        if(n || p > 0) items.push({ n, q, p });
+    });
+
+    // 2. 組成長網址
+    const p = new URLSearchParams({
+        c: document.getElementById('clientName').value,
+        t: document.getElementById('clientTax').value,
+        i: document.getElementById('quoteId').value,
+        n: document.getElementById('quoteNote').value,
+        tx: document.getElementById('isTaxInclusive').value,
+        items: JSON.stringify(items),
+        lock: 1
+    });
+
+    const longUrl = `${window.location.origin + window.location.pathname}?${p.toString()}`;
+
+    // 3. 前端呼叫 TinyURL API
+    // 注意：這裡使用 TinyURL 的簡單 API 接口，並透過一個開放的 Proxy 轉發來繞過 CORS 限制
+    // 這是前端最穩定的解決方案，不需要經過你的 Pipedream
+    const proxyUrl = 'https://api.allorigins.win/get?url=';
+    const tinyApi = `https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`;
+
+    try {
+        const response = await fetch(`${proxyUrl}${encodeURIComponent(tinyApi)}`);
+        const data = await response.json();
+        
+        if (data.contents) {
+            const shortUrl = data.contents;
+            document.getElementById('shortUrl').value = shortUrl;
+            await navigator.clipboard.writeText(shortUrl);
+            alert("✨ 短連結已產生 (TinyURL)：\n" + shortUrl);
+        } else {
+            throw new Error();
+        }
+    } catch (e) {
+        // 備案：如果 Proxy 也失效，直接複製長連結
+        await navigator.clipboard.writeText(longUrl);
+        alert("自動縮址服務連線異常，已為您複製原始長連結。");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+    }
+
+    // 輔助函式：嘗試使用另一個較寬鬆的 API
+    async function fetchShortUrl(longUrl) {
+        // 這裡我們嘗試使用一個中轉 API
+        const res = await fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(longUrl)}`);
+        if (res.ok) return await res.text();
+        throw new Error("fail");
+    }
+
+    // 儲存至 Notion：傳送長連結，讓 Pipedream 去處理縮址
+    async function saveToNotion() {
+    const btn = document.getElementById('saveBtn');
+    let shortUrlField = document.getElementById('shortUrl');
+    
+    // --- 強化邏輯：如果尚未產生短網址，先自動執行縮址 ---
+    if (!shortUrlField.value || shortUrlField.value === "") {
+        const confirmGen = confirm("尚未產生短網址，系統將先為您生成縮址再儲存至 Notion，好嗎？");
+        if (confirmGen) {
+            await generateShortLink(); // 呼叫原本的縮址函式
+        } else {
+            return; // 使用者取消則停止執行
+        }
+    }
+
+    const items = [];
+    document.querySelectorAll('#item-list tr').forEach(row => {
+        items.push({ 
+            name: row.querySelector('.name-input').value, 
+            quantity: row.querySelector('.qty-input').value, 
+            price: row.querySelector('.price-input').value, 
+            subtotal: row.querySelector('.total-cell').innerText 
+        });
+    });
+
+    btn.innerText = "同步中..."; btn.disabled = true;
+
+    const payload = {
+        company: document.getElementById('clientName').value,
+        taxId: document.getElementById('clientTax').value,
+        id: document.getElementById('quoteId').value,
+        shortUrl: shortUrlField.value, // 這時一定會有值了
+        total: parseInt(document.getElementById('grandTotal').innerText.replace(/,/g, '')),
+        taxMode: document.getElementById('isTaxInclusive').value,
+        items: items 
+    };
+
+    try {
+        const res = await fetch("https://eoinf2042dc3qgm.m.pipedream.net", { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(payload) 
+        });
+        if (res.ok) {
+            alert('✅ 已同步至 Notion！\n短網址：' + shortUrlField.value);
+        } else {
+            throw new Error();
+        }
+    } catch (e) { 
+        alert('❌ 同步失敗，請檢查網路連線'); 
+    } finally { 
+        btn.innerText = "儲存至 Notion"; 
+        btn.disabled = false; 
+    }
+}
+
+
+        function saveAsImage(e) {
+            const btn = e.target; btn.innerText = "產生中..."; btn.disabled = true;
+            html2canvas(document.getElementById('invoice'), { scale: 2, backgroundColor: "#FFFFFF" }).then(canvas => {
+                const imgData = canvas.toDataURL("image/png");
+                if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                    const newTab = window.open();
+                    newTab.document.write(`<img src="${imgData}" style="width:100%" />`);
+                    alert("✅ 圖片已在新視窗開啟，請長按儲存並回傳。");
+                } else {
+                    const link = document.createElement('a');
+                    link.download = `${document.getElementById('quoteId').value}.png`;
+                    link.href = imgData; link.click();
+                }
+                btn.innerText = "存為 PNG (回傳用)"; btn.disabled = false;
+            });
+        }
+
+        function clearSignature() { signaturePad.clear(); }
+        function removeItem(btn) { btn.closest('tr').remove(); calculate(); }
+        function autoHeight(el) { el.style.height = "auto"; el.style.height = (el.scrollHeight) + "px"; }
+        function handlePrint() { 
+            document.title = document.getElementById('quoteId').value; 
+            window.print(); 
+        }
+    </script>
+</body>
+</html>
